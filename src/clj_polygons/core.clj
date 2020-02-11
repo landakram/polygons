@@ -121,23 +121,23 @@
 (defn initial-state []
   (let [step-size 10
         threshold 0.05
-        points (make-points step-size threshold (q/width) (q/height))]
+        points (make-points step-size threshold (q/width) (q/height))
+        triangulation (triangulate points)
+        faces (get-faces triangulation)
+        ]
     {:step-size step-size
-     :points points}))
+     :points points
+     :initial-triangulation triangulation
+     :faces (get-faces triangulation)
+     :round 0
+     :rounds (/ (count faces) 2)}))
 
 (defn setup []
-  (q/no-loop)
   (q/frame-rate 30)
   (q/stroke 204 102 0)
   (q/fill 204 102 0)
   (q/color-mode :rgb)
   (initial-state))
-
-(defn update-state [state]
-  state)
-
-#_(def comp (atom nil))
-#_(def g (atom nil))
 
 (defn shrink-polygon [faces rounds]
   (loop [round 0
@@ -153,11 +153,32 @@
                    new-faces)))
         faces))))
 
-(defn draw-state [{:keys [points] :as state}]
+(defn update-state [{:keys [round rounds faces] :as state}]
+  (let [new-round (+ 1 round)]
+    (if (>= new-round rounds)
+      state
+      (merge
+       state
+       {:faces (shrink-polygon faces 1)
+        :round new-round}))))
+
+#_(def comp (atom nil))
+#_(def g (atom nil))
+
+
+(defn draw-state [{:keys [points faces] :as state}]
   (q/background 250)
   (doseq [point points]
     (q/point (:x point) (:y point)))
-  (let [triangulation (triangulate points)
+  (doseq [{:keys [point1 point2 point3]} faces]
+    (q/fill 255 0 0)
+    (q/stroke 0 0 0)
+    (q/triangle
+     (:x point1) (:y point1)
+     (:x point2) (:y point2)
+     (:x point3) (:y point3))
+    )
+  #_(let [triangulation (triangulate points)
         faces (get-faces triangulation)]
     (doseq [{:keys [point1 point2 point3]} faces]
       (let [r (q/random 255)
