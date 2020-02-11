@@ -4,10 +4,7 @@
             [loom.alg :as alg]
             [loom.derived :as derived]
             [delaunay-triangulation.core :as delaunay]
-            [clojure.pprint :refer [pprint]]
-            )
-  (:import [megamu.mesh Delaunay]))
-
+            [clojure.pprint :refer [pprint]]))
 
 (defn make-points [step-size threshold width height]
   (set
@@ -16,38 +13,21 @@
           :when (< (q/random 1) threshold)]
       {:x x :y y})))
 
-(defn to-points-array [points]
-  (let [points-array (make-array Float/TYPE (count points) 2)]
-    (doseq [[i point] (map-indexed vector points)]
-      (aset-float points-array i 0 (:x point))
-      (aset-float points-array i 1 (:y point)))
-    points-array))
+(defn to-points-vec [points]
+  (map (fn [point] [(:x point) (:y point)]) points))
 
 (defn triangulate [points]
-  (let [points-array (to-points-array points)
-        delaunay (new Delaunay (to-points-array points))]
-    {:points points
-     :points-array points-array
-     :delaunay delaunay}))
+  (let [points-vec (to-points-vec points)
+        triangulation (delaunay/triangulate points-vec)]
+    triangulation))
 
-(defn to-point [point-array-val]
-  {:x (aget point-array-val 0)
-   :y (aget point-array-val 1)})
-
-(defn get-faces [{:keys [delaunay points-array]}]
-  (let [faces (.getFaces delaunay)
-        java-face-to-clj-face (fn [[point1-idx point2-idx point3-idx]]
-                                (if (and (< point1-idx (count points-array))
-                                         (< point2-idx (count points-array))
-                                         (< point3-idx (count points-array)))
-                                  (let [point1 (to-point (aget points-array point1-idx))
-                                        point2 (to-point (aget points-array point2-idx))
-                                        point3 (to-point (aget points-array point3-idx))]
-                                    {:point1 point1
-                                     :point2 point2
-                                     :point3 point3})
-                                  nil))]
-    (remove nil? (map java-face-to-clj-face faces))))
+(defn get-faces [{:keys [points edges triangles]}]
+  (map
+   (fn [[p1 p2 p3]]
+     {:point1 {:x (first p1) :y (second p1)}
+      :point2 {:x (first p2) :y (second p2)}
+      :point3 {:x (first p3) :y (second p3)}})
+   triangles))
 
 ;; Points are ordered clockwise from 12 o'clock.
 (defn point-less-than? [point1 point2]
@@ -126,8 +106,8 @@
 (defn update-state [state]
   state)
 
-(def comp (atom nil))
-(def g (atom nil))
+#_(def comp (atom nil))
+#_(def g (atom nil))
 
 (defn draw-state [{:keys [points] :as state}]
   (q/background 250)
@@ -166,15 +146,11 @@
                            largest))
                        components)
               longest-graph (derived/subgraph-reachable-from graph (first longest))
-              longest-edges (alg/bf-path longest-graph
-                                         (first (loom.graph/nodes longest-graph))
-                                         (last (loom.graph/nodes longest-graph)))
-              ;;longest-edges (loom.graph/edges longest-graph)
-              ]
-          ;; (println components)
-          ;; (println longest)
-          (reset! g graph)
-          (reset! comp longest-graph)
+              longest-edges (loom.graph/edges longest-graph)]
+
+          #_(reset! g graph)
+          #_(reset! comp longest-graph)
+
           (q/stroke 255 0 0)
           (doseq [[start end] longest-edges]
             (q/line (:x start) (:y start) (:x end) (:y end)))

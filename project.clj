@@ -6,6 +6,4 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [aysylu/loom "1.0.2"]
                  [trystan/delaunay-triangulation "1.0.1"]
-                 [quil "3.1.0"]]
-  :resource-paths ["resources/mesh.jar"
-                   "resources/quickhull3d.1.4.jar"])
+                 [quil "3.1.0"]])
