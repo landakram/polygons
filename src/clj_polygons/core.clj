@@ -4,6 +4,7 @@
             [loom.alg :as alg]
             [loom.derived :as derived]
             [delaunay-triangulation.core :as delaunay]
+            [clojure.set]
             [clojure.pprint :refer [pprint]]))
 
 (defn make-points [step-size threshold width height]
@@ -68,25 +69,54 @@
     {:start start
      :end end}))
 
+;; The outer boundary is the longest contiguous 
+;; set of edges that only appear in a single face.
+;; 
+;; So first we find all edges that only appear in a single face.
+;; Then we find the longest contiguous edge. We do this to remove
+;; "inner hole" artifacts of the Delaunay triangulation.
+
+(defn get-edges [{:keys [point1 point2 point3 :as face]}]
+  [(make-edge point1 point2)
+   (make-edge point2 point3)
+   (make-edge point3 point1)])
+
+(defn has-edge? [face edge]
+  (let [edges (get-edges face)]
+    (some #(= edge %) edges)))
+
+(defn get-boundary-faces [faces boundary-edges]
+  (filter
+   (fn [face]
+     (some #(has-edge? face %) boundary-edges))
+   faces))
+
 (defn get-boundary [faces]
   (let [all-edges (flatten
                    (map
-                    (fn [{:keys [point1 point2 point3]}]
-                      [(make-edge point1 point2)
-                       (make-edge point2 point3)
-                       (make-edge point3 point1)])
+                    get-edges
                     faces))
-        edge-counts (frequencies all-edges)]
-    (->> edge-counts
-         (filter (fn [[edge count]] (= count 1)))
-         (map #(first %)))))
-
-;; 1. Make an adjacency list
-;;
-;; 2. Starting from a node, start traversing the graph using DFS keeping count of
-;; the number of nodes traversed
-;;
-;; 3. Repeat from every node, but 
+        edge-counts (frequencies all-edges)
+        boundary-candidates (->> edge-counts
+                                 (filter (fn [[edge count]] (= count 1)))
+                                 (map #(first %)))
+        boundary-graph (reduce
+                        (fn [g edge]
+                          (loom.graph/add-edges g [(:start edge) (:end edge)]))
+                        (loom.graph/graph)
+                        boundary-candidates)
+        boundary-components (alg/connected-components boundary-graph)
+        longest-boundary-component (reduce
+                                    (fn [largest current]
+                                      (if (> (count current) (count largest))
+                                        current
+                                        largest))
+                                    boundary-components)
+        as-graph (derived/subgraph-reachable-from boundary-graph (first longest-boundary-component))
+        boundary-edges (loom.graph/edges as-graph)]
+    (map
+     (fn [[start end]] (make-edge start end))
+     boundary-edges)))
 
 (defn initial-state []
   (let [step-size 10
@@ -109,6 +139,20 @@
 #_(def comp (atom nil))
 #_(def g (atom nil))
 
+(defn shrink-polygon [faces rounds]
+  (loop [round 0
+         faces faces]
+    (let [boundary-edges (get-boundary faces)
+          boundary-faces (get-boundary-faces faces boundary-edges)]
+      (println round "of" rounds)
+      (if (< round rounds)
+        (do
+          (let [random-boundary-face (rand-nth boundary-faces)
+                new-faces (clojure.set/difference (set faces) (set [random-boundary-face]))]
+            (recur (+ 1 round)
+                   new-faces)))
+        faces))))
+
 (defn draw-state [{:keys [points] :as state}]
   (q/background 250)
   (doseq [point points]
@@ -126,35 +170,30 @@
          (:x point2) (:y point2)
          (:x point3) (:y point3))))
 
-    (let [boundary-edges (get-boundary faces)]
+    (let [boundary-edges (get-boundary faces)
+          boundary-faces (get-boundary-faces faces boundary-edges)]
       (doseq [{:keys [start end]} boundary-edges]
         (q/stroke-weight 3)
         (q/stroke 0 0 0)
         (q/line (:x start) (:y start) (:x end) (:y end)))
-      (let [graph (reduce
-                   (fn [g edge]
-                     (loom.graph/add-edges g [(:start edge)
-                                              (:end edge)]))
-                   (loom.graph/graph)
-                   boundary-edges)]
-        
-        (let [components (alg/connected-components graph)
-              longest (reduce
-                       (fn [largest current]
-                         (if (> (count current) (count largest))
-                           current
-                           largest))
-                       components)
-              longest-graph (derived/subgraph-reachable-from graph (first longest))
-              longest-edges (loom.graph/edges longest-graph)]
+      (doseq [{:keys [point1 point2 point3]} boundary-faces]
+        (q/fill 0 0 0)
+        (q/triangle
+         (:x point1) (:y point1)
+         (:x point2) (:y point2)
+         (:x point3) (:y point3))
+        )
 
-          #_(reset! g graph)
-          #_(reset! comp longest-graph)
-
+      (let [p (shrink-polygon faces (/ (count faces) 2))]
+        (doseq [{:keys [point1 point2 point3]} p]
+          (q/fill 255 0 0)
           (q/stroke 255 0 0)
-          (doseq [[start end] longest-edges]
-            (q/line (:x start) (:y start) (:x end) (:y end)))
-          ))
+          (q/triangle
+           (:x point1) (:y point1)
+           (:x point2) (:y point2)
+           (:x point3) (:y point3))
+          )
+        )
       )
     )
   )
