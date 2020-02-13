@@ -122,24 +122,83 @@
   (let [step-size 10
         threshold 0.05
         points (make-points step-size threshold (q/width) (q/height))
+
         triangulation (triangulate points)
         faces (get-faces triangulation)
         ]
     {:step-size step-size
      :points points
      :initial-triangulation triangulation
+     :noise {:counter 0
+             :step 0.01}
      :faces (get-faces triangulation)
      :round 0
      :rounds (/ (count faces) 2)}))
 
 (defn setup []
   (q/frame-rate 30)
+  (q/smooth 4)
   (q/stroke 204 102 0)
   (q/fill 204 102 0)
   (q/color-mode :rgb)
   (initial-state))
 
-(defn shrink-polygon [faces rounds]
+(defn find-center [points]
+  (let [xs (map #(:x %) points)
+        ys (map #(:y %) points)
+        x-center (/ (reduce + xs) (count xs))
+        y-center (/ (reduce + ys) (count ys))]
+    {:x x-center
+     :y y-center}))
+
+
+(defn pow2 [x] (Math/pow x 2))
+(defn point-distance-from [p1 p2]
+ (Math/sqrt (+ (pow2 (Math/abs (- (:x p1) (:x p2))))
+                (pow2 (Math/abs (- (:y p1) (:y p2)))))))
+
+(defn face-distance-from [{:keys [point1 point2 point3]} point]
+  (+
+   (point-distance-from point1 point)
+   (point-distance-from point2 point)
+   (point-distance-from point3 point)))
+
+
+(defn sort-by-distance-from-center [boundary-faces]
+  (let [points (flatten (map vals boundary-faces))
+        center (find-center points)
+        sorted-by-closest (sort
+                           (fn [left right]
+                             (< 
+                              (face-distance-from left center)
+                              (face-distance-from right center)))
+                           boundary-faces)]
+    sorted-by-closest))
+
+(defn select-boundary-face [boundary-faces noise]
+  ;; Add some heurstics here:
+  ;;
+  ;; We want to prefer boundary-faces that are closer to the center of the polygon as a whole
+  ;;
+  ;; Later, we'll want to prefer boundary-faces that are not abutting another polygon
+  (let [take-threshold (* (count boundary-faces) 0.5)]
+    (println take-threshold)
+    (if (> (q/random 1) 0.3)
+      (do 
+        (println "random")
+        (rand-nth boundary-faces))
+      (do
+        (println "closest")
+        (rand-nth (take take-threshold (sort-by-distance-from-center boundary-faces))))
+      ))
+  #_(rand-nth boundary-faces)
+  #_(let [noise-val (q/noise (:counter noise))
+        the-nth (Math/round (* (- (count boundary-faces) 1) noise-val))]
+    (println noise-val)
+    (println the-nth)
+    (nth boundary-faces the-nth)))
+
+(defn shrink-polygon [faces rounds noise]
   (loop [round 0
          faces faces]
     (let [boundary-edges (get-boundary faces)
@@ -147,76 +206,34 @@
       (println round "of" rounds)
       (if (< round rounds)
         (do
-          (let [random-boundary-face (rand-nth boundary-faces)
+          (let [random-boundary-face (select-boundary-face boundary-faces noise)
                 new-faces (clojure.set/difference (set faces) (set [random-boundary-face]))]
             (recur (+ 1 round)
                    new-faces)))
         faces))))
 
-(defn update-state [{:keys [round rounds faces] :as state}]
-  (let [new-round (+ 1 round)]
+(defn update-state [{:keys [round rounds faces noise] :as state}]
+  (let [new-round (+ 2 round)]
     (if (>= new-round rounds)
       state
       (merge
        state
-       {:faces (shrink-polygon faces 1)
+       {:faces (shrink-polygon faces 2 noise)
+        :noise {:counter (+ (:step noise) (:counter noise))
+                :step (:step noise)}
         :round new-round}))))
 
-#_(def comp (atom nil))
-#_(def g (atom nil))
-
-
 (defn draw-state [{:keys [points faces] :as state}]
-  (q/background 250)
-  (doseq [point points]
-    (q/point (:x point) (:y point)))
-  (doseq [{:keys [point1 point2 point3]} faces]
-    (q/fill 255 0 0)
-    (q/stroke 0 0 0)
-    (q/triangle
-     (:x point1) (:y point1)
-     (:x point2) (:y point2)
-     (:x point3) (:y point3))
-    )
-  #_(let [triangulation (triangulate points)
-        faces (get-faces triangulation)]
+  (let [bg-col {:r 31 :g 31 :b 30}]
+    (q/background (:r bg-col) (:g bg-col) (:b bg-col))
     (doseq [{:keys [point1 point2 point3]} faces]
-      (let [r (q/random 255)
-            g (q/random 255)
-            b (q/random 255)]
-        (q/stroke r g b)
-        (q/fill r g b)
-        (q/triangle
-         (:x point1) (:y point1)
-         (:x point2) (:y point2)
-         (:x point3) (:y point3))))
-
-    (let [boundary-edges (get-boundary faces)
-          boundary-faces (get-boundary-faces faces boundary-edges)]
-      (doseq [{:keys [start end]} boundary-edges]
-        (q/stroke-weight 3)
-        (q/stroke 0 0 0)
-        (q/line (:x start) (:y start) (:x end) (:y end)))
-      (doseq [{:keys [point1 point2 point3]} boundary-faces]
-        (q/fill 0 0 0)
-        (q/triangle
-         (:x point1) (:y point1)
-         (:x point2) (:y point2)
-         (:x point3) (:y point3))
-        )
-
-      (let [p (shrink-polygon faces (/ (count faces) 2))]
-        (doseq [{:keys [point1 point2 point3]} p]
-          (q/fill 255 0 0)
-          (q/stroke 255 0 0)
-          (q/triangle
-           (:x point1) (:y point1)
-           (:x point2) (:y point2)
-           (:x point3) (:y point3))
-          )
-        )
-      )
-    )
+      (q/no-fill)
+      (q/stroke 255 255 255)
+      (q/triangle
+       (:x point1) (:y point1)
+       (:x point2) (:y point2)
+       (:x point3) (:y point3))
+      ))
   )
 
 (defn point-to-vec [point]
