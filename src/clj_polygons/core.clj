@@ -123,7 +123,9 @@
   (let [points (make-points params)
         triangulation (triangulate points)
         faces (get-faces triangulation)]
-    {:faces faces}))
+    {:faces faces
+     :round 0
+     :rounds (/ (count faces) 2)}))
 
 (defn scale [{:keys [width height] :as grid} percent]
   (merge grid {:width (* width percent) :height (* height percent)}))
@@ -145,9 +147,7 @@
     {:grid grid
      :noise {:counter 0
              :step 0.01}
-     :polygon polygon
-     :round 0
-     :rounds (/ (count (:faces polygon)) 2)}))
+     :polygon polygon}))
 
 (defn setup []
   (q/frame-rate 30)
@@ -227,18 +227,23 @@
                 new-faces (clojure.set/difference (set faces) (set [random-boundary-face]))]
             (recur (+ 1 round)
                    new-faces)))
-        {:faces faces}))))
+        (merge polygon
+               {:faces faces
+                :round (+ (:round polygon) rounds)})))))
 
-(defn update-state [{:keys [round rounds polygon noise] :as state}]
-  (let [new-round (+ 2 round)]
+(defn update-polygon [polygon noise]
+  (let [{:keys [round rounds]} polygon
+        new-round (+ 2 (:round polygon round))]
     (if (>= new-round rounds)
-      state
-      (merge
-       state
-       {:polygon (shrink-polygon polygon 2 noise)
-        :noise {:counter (+ (:step noise) (:counter noise))
-                :step (:step noise)}
-        :round new-round}))))
+      polygon
+      (shrink-polygon polygon 2 noise))))
+
+(defn update-state [{:keys [polygon noise] :as state}]
+  (merge
+   state
+   {:polygon (update-polygon polygon noise)
+    :noise {:counter (+ (:step noise) (:counter noise))
+            :step (:step noise)}}))
 
 (defn draw-state [{:keys [polygon] :as state}]
   (let [bg-col {:r 31 :g 31 :b 30}]
