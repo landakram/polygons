@@ -7,12 +7,13 @@
             [clojure.set]
             [clojure.pprint :refer [pprint]]))
 
-(defn make-points [step-size threshold width height]
-  (set
-    (for [x (range 0 width step-size)
-          y (range 0 height step-size)
-          :when (< (q/random 1) threshold)]
-      {:x x :y y})))
+(defn make-points [{:keys [threshold grid]}]
+  (let [{:keys [width height step-size origin]} grid]
+    (set
+     (for [x (range (:x origin) (+ (:x origin) width) step-size)
+           y (range (:y origin) (+ (:y origin) height) step-size)
+           :when (< (q/random 1) threshold)]
+       {:x x :y y}))))
 
 (defn to-points-vec [points]
   (map (fn [point] [(:x point) (:y point)]) points))
@@ -118,30 +119,46 @@
      (fn [[start end]] (make-edge start end))
      boundary-edges)))
 
-(defn initial-state []
-  (let [step-size 10
-        threshold 0.05
-        points (make-points step-size threshold (q/width) (q/height))
-
+(defn make-polygon [{:keys [threshold grid] :as params}]
+  (let [points (make-points params)
         triangulation (triangulate points)
-        faces (get-faces triangulation)
-        ]
-    {:step-size step-size
-     :points points
-     :initial-triangulation triangulation
+        faces (get-faces triangulation)]
+    {:faces faces}))
+
+(defn scale [{:keys [width height] :as grid} percent]
+  (merge grid {:width (* width percent) :height (* height percent)}))
+
+(defn translate [{ :keys [origin] :as grid} dx dy]
+  (let [x (:x origin)
+        y (:y origin)]
+    (merge grid {:origin {:x (+ x dx) :y (+ y dy)}})))
+
+(defn initial-state []
+  (let [grid {:width (q/width)
+              :height (q/height)
+              :origin {:x 0 :y 0}
+              :step-size 10}
+        polygon (make-polygon {:threshold 0.05
+                               :grid (-> grid
+                                         (scale 0.75)
+                                         (translate 100 100))})]
+    {:grid grid
      :noise {:counter 0
              :step 0.01}
-     :faces (get-faces triangulation)
+     :polygon polygon
      :round 0
-     :rounds (/ (count faces) 2)}))
+     :rounds (/ (count (:faces polygon)) 2)}))
 
 (defn setup []
   (q/frame-rate 30)
-  (q/smooth 4)
+  #_(q/smooth 4)
   (q/stroke 204 102 0)
   (q/fill 204 102 0)
   (q/color-mode :rgb)
   (initial-state))
+
+#_(quil.applet/with-applet clj-polygons
+  (make-polygon {:threshold 0.5 :grid {:width 500 :height 500 :step-size 10}}))
 
 (defn find-center [points]
   (let [xs (map #(:x %) points)
@@ -198,9 +215,9 @@
     (println the-nth)
     (nth boundary-faces the-nth)))
 
-(defn shrink-polygon [faces rounds noise]
+(defn shrink-polygon [polygon rounds noise]
   (loop [round 0
-         faces faces]
+         faces (:faces polygon)]
     (let [boundary-edges (get-boundary faces)
           boundary-faces (get-boundary-faces faces boundary-edges)]
       (println round "of" rounds)
@@ -210,23 +227,23 @@
                 new-faces (clojure.set/difference (set faces) (set [random-boundary-face]))]
             (recur (+ 1 round)
                    new-faces)))
-        faces))))
+        {:faces faces}))))
 
-(defn update-state [{:keys [round rounds faces noise] :as state}]
+(defn update-state [{:keys [round rounds polygon noise] :as state}]
   (let [new-round (+ 2 round)]
     (if (>= new-round rounds)
       state
       (merge
        state
-       {:faces (shrink-polygon faces 2 noise)
+       {:polygon (shrink-polygon polygon 2 noise)
         :noise {:counter (+ (:step noise) (:counter noise))
                 :step (:step noise)}
         :round new-round}))))
 
-(defn draw-state [{:keys [points faces] :as state}]
+(defn draw-state [{:keys [polygon] :as state}]
   (let [bg-col {:r 31 :g 31 :b 30}]
     (q/background (:r bg-col) (:g bg-col) (:b bg-col))
-    (doseq [{:keys [point1 point2 point3]} faces]
+    (doseq [{:keys [point1 point2 point3]} (:faces polygon)]
       (q/no-fill)
       (q/stroke 255 255 255)
       (q/triangle
@@ -252,3 +269,4 @@
   ; Check quil wiki for more info about middlewares and particularly
   ; fun-mode.
   :middleware [m/fun-mode])
+
