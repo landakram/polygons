@@ -119,12 +119,24 @@
      (fn [[start end]] (make-edge start end))
      boundary-edges)))
 
+(defn face-colors [faces]
+  (into
+   {}
+   (map
+    (fn [face]
+      (let [r (q/random 255)
+            g r
+            b r]
+        [face {:r r :g g :b b}]))
+    faces)))
+
 (defn make-polygon [{:keys [threshold grid] :as params}]
   (let [points (make-points params)
         triangulation (triangulate points)
         faces (get-faces triangulation)]
     {:faces faces
      :round 0
+     :face-colors (face-colors faces)
      :rounds (/ (count faces) 2)}))
 
 (defn scale [{:keys [width height] :as grid} percent]
@@ -135,19 +147,48 @@
         y (:y origin)]
     (merge grid {:origin {:x (+ x dx) :y (+ y dy)}})))
 
+(defn random-polygons [n grid]
+  (let [threshold 0.05]
+    (map
+     (fn [i]
+       (let [scale-val (q/random 0.4 0.7)
+             origin-x (q/random 0 (- (q/width) 200))
+             origin-y (q/random 0 (- (q/height) 200))]
+         (make-polygon {:threshold threshold
+                        :grid (-> grid
+                                  (scale scale-val)
+                                  (translate origin-x origin-y))})))
+     (range n))))
+
+(defn four-polygons [grid]
+  [(make-polygon {:threshold 0.05
+                  :grid (-> grid
+                            (scale 0.5)
+                            (translate 0 0))})
+   (make-polygon {:threshold 0.05
+                  :grid (-> grid
+                            (scale 0.5)
+                            (translate (/ (q/width) 2) 0))})
+   (make-polygon {:threshold 0.05
+                  :grid (-> grid
+                            (scale 0.5)
+                            (translate 0 (/ (q/height) 2)))})
+   (make-polygon {:threshold 0.05
+                  :grid (-> grid
+                            (scale 0.5)
+                            (translate (/ (q/width) 2) (/ (q/height) 2)))})])
+
 (defn initial-state []
   (let [grid {:width (q/width)
               :height (q/height)
               :origin {:x 0 :y 0}
-              :step-size 10}
-        polygon (make-polygon {:threshold 0.05
-                               :grid (-> grid
-                                         (scale 0.75)
-                                         (translate 100 100))})]
+              :step-size 10}]
     {:grid grid
      :noise {:counter 0
              :step 0.01}
-     :polygon polygon}))
+     :polygons
+     (four-polygons grid)
+     #_(random-polygons 6 grid)}))
 
 (defn setup []
   (q/frame-rate 30)
@@ -238,24 +279,28 @@
       polygon
       (shrink-polygon polygon 2 noise))))
 
-(defn update-state [{:keys [polygon noise] :as state}]
+(defn update-state [{:keys [polygons noise] :as state}]
   (merge
    state
-   {:polygon (update-polygon polygon noise)
+   {:polygons (map #(update-polygon % noise) polygons)
     :noise {:counter (+ (:step noise) (:counter noise))
             :step (:step noise)}}))
-
-(defn draw-state [{:keys [polygon] :as state}]
+ 
+(defn draw-state [{:keys [polygons] :as state}]
   (let [bg-col {:r 31 :g 31 :b 30}]
     (q/background (:r bg-col) (:g bg-col) (:b bg-col))
-    (doseq [{:keys [point1 point2 point3]} (:faces polygon)]
-      (q/no-fill)
-      (q/stroke 255 255 255)
-      (q/triangle
-       (:x point1) (:y point1)
-       (:x point2) (:y point2)
-       (:x point3) (:y point3))
-      ))
+    (doseq [polygon polygons]
+      (doseq [{:keys [point1 point2 point3] :as face} (:faces polygon)]
+        (let [{:keys [face-colors]} polygon
+              color (get face-colors face)]
+          #_(q/no-fill)
+          (q/stroke (:r color) (:g color) (:b color))
+          (q/fill (:r color) (:g color) (:b color))
+          (q/triangle
+           (:x point1) (:y point1)
+           (:x point2) (:y point2)
+           (:x point3) (:y point3)))
+        )))
   )
 
 (defn point-to-vec [point]
@@ -263,7 +308,7 @@
 
 (q/defsketch clj-polygons
   :title "Polygons"
-  :size [700 800]
+  :size [1100 900]
   ; setup function called only once, during sketch initialization.
   :setup setup
   ; update-state is called on each iteration before draw-state.
