@@ -6,4 +6,5 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [aysylu/loom "1.0.2"]
                  [trystan/delaunay-triangulation "1.0.1"]
+                 [factual/geo "3.0.1"]
                  [quil "3.1.0"]])
