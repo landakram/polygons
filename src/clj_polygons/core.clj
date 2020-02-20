@@ -36,7 +36,7 @@
     tiles)))
 
 (defn randomly-subdivided-tiles [grid rounds]
-  (let [tiles (create-tiles grid 1)]
+  (let [tiles (create-tiles grid 2)]
     (nth (iterate randomly-subdivide tiles) rounds)))
 
 (defn make-points [{:keys [threshold grid]}]
@@ -583,10 +583,10 @@
         (let [{:keys [face-colors]} polygon
               color (get face-colors face)]
 
-          #_(do
+          (do
             (q/stroke (:r color) (:g color) (:b color))
             (q/fill (:r color) (:g color) (:b color)))
-          (do
+          #_(do
             (q/no-fill)
             (q/stroke 255 255 255))
 
@@ -610,7 +610,7 @@
               (q/no-fill)
               (q/line (:x start) (:y start) (:x end) (:y end))))))
 
-      (q/save-frame "generated/iter1/####.png")
+      (q/save-frame "generated/iter2/####.png")
       ))
   )
 
