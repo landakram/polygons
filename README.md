@@ -1,6 +1,6 @@
 # Polygons
 
-![](generated/iter1/screens.gif)
+<img src="generated/iter1/screens.gif" alt="drawing" width="500" height="500"/>
 
 Polygons generated using Delaunay triangulations and iteratively removing edges.
 
