@@ -269,24 +269,6 @@
 ;; Then we find the longest contiguous edge. We do this to remove
 ;; "inner hole" artifacts of the Delaunay triangulation.
 
-(defn connect-edges [edges]
-  )
-
-#_(defn get-polygon-boundary [{:keys [faces]}]
-  (let [points (get-points faces)
-        center-point (find-center points)
-        all-edges (flatten
-                   (map
-                    #(get-edges % center-point)
-                    faces))
-        edge-counts (frequencies all-edges)
-        boundary-candidates (->> edge-counts
-                                 (filter (fn [[edge count]] (= count 1)))
-                                 (map #(first %)))
-        largest-connected-edge 
-        ]
-    ))
-
 (def x (atom nil))
 (def f (atom nil))
 (def ae (atom nil))
@@ -511,10 +493,6 @@
 (def free-points (atom nil))
 (def g (atom nil))
 
-#_(quil.applet/with-applet clj-polygons
-  (let [state (initial-state)]
-    (pprint (get-boundary (:faces (first (:polygons state)))))))
-
 (defn find-free-region [{:keys [polygons grid]}]
   (let [free-points (find-free-points grid polygons)]
     (max-free grid free-points)))
@@ -616,6 +594,10 @@
 
 (defn point-to-vec [point]
   [(:x point) (:y point)])
+
+#_(quil.applet/with-applet clj-polygons
+  (let [state (initial-state)]
+    (pprint (get-boundary (:faces (first (:polygons state)))))))
 
 (q/defsketch clj-polygons
   :title "Polygons"
