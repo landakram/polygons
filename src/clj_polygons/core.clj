@@ -11,10 +11,33 @@
             [clojure.pprint :refer [pprint]]))
 
 (defn enumerate-points [grid]
-  (let [{:keys [width height step-size origin]} grid]
-    (for [x (range (:x origin) (+ (:x origin) width) step-size)
-          y (range (:y origin) (+ (:y origin) height) step-size)]
+  (let [{:keys [width height step-width step-height origin]} grid]
+    (for [x (range (:x origin) (+ (:x origin) width) step-width)
+          y (range (:y origin) (+ (:y origin) height) step-height)]
       {:x x :y y})))
+
+
+(defn create-tiles [grid sections]
+  (let [tile-width (/ (:width grid) sections)
+        tile-height (/ (:height grid) sections)]
+    (map
+     (fn [point]
+       (merge grid {:origin point :width tile-width :height tile-height}))
+     (enumerate-points (merge grid {:step-width tile-width :step-height tile-height})))))
+
+
+(defn randomly-subdivide [tiles]
+  (flatten
+   (map 
+    (fn [tile]
+      (if (< (rand 1) 0.5)
+        (create-tiles tile 2)
+        [tile]))
+    tiles)))
+
+(defn randomly-subdivided-tiles [grid rounds]
+  (let [tiles (create-tiles grid 1)]
+    (nth (iterate randomly-subdivide tiles) rounds)))
 
 (defn make-points [{:keys [threshold grid]}]
   (set
@@ -77,14 +100,15 @@
 (defn center-y []
   (/ (q/height) 2))
 
+(defn center-point []
+  {:x (center-x) :y (center-y)})
+
 (defn make-edge [point1 point2]
   (let [start (if (point-less-than? point1 point2 (:x (center-point)) (:y (center-point))) point1 point2)
         end (if (= start point1) point2 point1)]
     {:start start
      :end end}))
 
-(defn center-point []
-  {:x (center-x) :y (center-y)})
 
 (defn get-edges [{:keys [point1 point2 point3 :as face]}]
   [(make-edge point1 point2)
@@ -153,7 +177,7 @@
         triangulation (triangulate points)
         faces (get-faces triangulation)]
     {:faces faces
-     :round 0
+     :round 1
      :face-colors (face-colors faces)
      :rounds (/ (count faces) 2)}))
 
@@ -164,6 +188,15 @@
   (let [x (:x origin)
         y (:y origin)]
     (merge grid {:origin {:x (+ x dx) :y (+ y dy)}})))
+
+(defn tiled-polygons [grid rounds]
+  (let [tiles (randomly-subdivided-tiles grid rounds)]
+    (map
+     (fn [tile]
+       (let [scale-factor (/ (:width tile) (:width grid))
+             threshold (if (< scale-factor 0.25) 0.2 0.1)]
+         (make-polygon {:threshold threshold :grid tile})))
+     tiles)))
 
 (defn random-polygons [n grid]
   (let [threshold 0.05]
@@ -200,10 +233,12 @@
   (let [grid {:width (q/width)
               :height (q/height)
               :origin {:x 0 :y 0}
-              :step-size 10}]
+              :step-width 10
+              :step-height 10}]
     {:grid grid
      :polygons
-     (four-polygons grid)
+     (tiled-polygons grid 3)
+     #_(four-polygons grid)
      #_[{:faces [{:point1 {:x 100 :y 100}
                 :point2 {:x 300 :y 100}
                 :point3 {:x 200 :y 200}}
@@ -438,13 +473,13 @@
          polygon-boundaries)))
      (enumerate-points grid))))
 
-(defn bounding-boxes [grid scalar step-size]
+(defn bounding-boxes [grid scalar width height]
   (let [box (scale grid scalar)
         g-origin (:origin grid)
         g-width (:width grid)
         g-height (:height grid)]
-    (for [x (range (:x g-origin) (+ (:x g-origin) g-width) step-size)
-          y (range (:y g-origin) (+ (:y g-origin) g-height) step-size)]
+    (for [x (range (:x g-origin) (+ (:x g-origin) g-width) width)
+          y (range (:y g-origin) (+ (:y g-origin) g-height) height)]
       (translate box x y))))
 
 (defn point-in-grid? [point grid]
@@ -459,7 +494,7 @@
      (<= (:y point) farthest-y))))
 
 (defn max-free [grid free-points]
-  (let [boxes (bounding-boxes grid 0.25 (q/random 60 100))
+  (let [boxes (bounding-boxes grid 0.25 (q/random 60 100) (q/random 60 100))
         max (reduce
              (fn [max box]
                (let [free-points-in-box (filter #(point-in-grid? % box) free-points)
@@ -575,6 +610,7 @@
               (q/no-fill)
               (q/line (:x start) (:y start) (:x end) (:y end))))))
 
+      (q/save-frame "generated/iter1/####.png")
       ))
   )
 
@@ -583,7 +619,7 @@
 
 (q/defsketch clj-polygons
   :title "Polygons"
-  :size [800 1000]
+  :size [800 800]
   :settings
   (fn []
     (q/smooth 8))
