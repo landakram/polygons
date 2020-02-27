@@ -534,48 +534,29 @@
        {:polygons (map update-polygon polygons)}))))
 
 (def s (atom nil))
- 
-(defn draw-state [{:keys [polygons grid] :as state}]
-  #_(reset! s state)
-  (let [bg-col {:r 31 :g 31 :b 30}]
-    (q/background (:r bg-col) (:g bg-col) (:b bg-col))
 
-    #_(let [boxes (bounding-boxes grid 0.25 100)]
-      (doseq [box (take 26 boxes)]
-        (q/stroke 0 255 0)
-        (q/rect (get-in box [:origin :x]) (get-in box [:origin :y])
-                (:width box)
-                (:height box))))
+(defn draw-polygons [polygons]
+  (doseq [polygon polygons]
+    ;; Draw triangles
+    (doseq [{:keys [point1 point2 point3] :as face} (:faces polygon)]
+      (let [{:keys [face-colors]} polygon
+            color (get face-colors face)]
 
-    ;; Draw free points
-    #_(let [free (find-free-points grid polygons)]
-      (doseq [point free]
-        (q/stroke 255 255 255)
-        (q/point (:x point) (:y point))))
-    (doseq [polygon polygons]
-
-      
-      ;; Draw triangles
-
-      (doseq [{:keys [point1 point2 point3] :as face} (:faces polygon)]
-        (let [{:keys [face-colors]} polygon
-              color (get face-colors face)]
-
-          (do
+        #_(do
             (q/stroke (:r color) (:g color) (:b color))
             (q/fill (:r color) (:g color) (:b color)))
-          #_(do
-            (q/no-fill)
-            (q/stroke 255 255 255))
+        (do
+          (q/no-fill)
+          (q/stroke 0 0 0))
 
-          (q/triangle
-           (:x point1) (:y point1)
-           (:x point2) (:y point2)
-           (:x point3) (:y point3)))
-        )
+        (q/triangle
+         (:x point1) (:y point1)
+         (:x point2) (:y point2)
+         (:x point3) (:y point3)))
+      )
 
-      ;; Draw boundaries
-      #_(let [boundary (get-boundary (:faces polygon))]
+    ;; Draw boundaries
+    #_(let [boundary (get-boundary (:faces polygon))]
         (doseq [i (range (count boundary))]
           (let [edge (nth boundary i)]
             (do
@@ -588,8 +569,38 @@
               (q/no-fill)
               (q/line (:x start) (:y start) (:x end) (:y end))))))
 
-      (q/save-frame "generated/iter2/####.png")
-      ))
+    )
+  )
+ 
+(defn draw-state [{:keys [polygons grid] :as state}]
+  #_(reset! s state)
+  (let [bg-col {:r 31 :g 31 :b 30}]
+    (q/background 255)
+    #_(q/background (:r bg-col) (:g bg-col) (:b bg-col))
+
+    #_(let [boxes (bounding-boxes grid 0.25 100)]
+        (doseq [box (take 26 boxes)]
+          (q/stroke 0 255 0)
+          (q/rect (get-in box [:origin :x]) (get-in box [:origin :y])
+                  (:width box)
+                  (:height box))))
+
+    (draw-polygons polygons)
+
+    (when (every? done-shrinking? polygons)
+      (println "Recording to svg...")
+      (let [file (str "generated/out.svg")]
+        (q/do-record (q/create-graphics 800 800 :svg file)
+                     (draw-polygons polygons))
+        (println "Done.")
+        (q/no-loop)))
+    #_(q/save-frame "generated/iter2/####.png")
+
+    ;; Draw free points
+    #_(let [free (find-free-points grid polygons)]
+        (doseq [point free]
+          (q/stroke 255 255 255)
+          (q/point (:x point) (:y point)))))
   )
 
 (defn point-to-vec [point]
@@ -605,9 +616,7 @@
   :settings
   (fn []
     (q/smooth 8))
-  ; setup function called only once, during sketch initialization.
   :setup setup
-  ; update-state is called on each iteration before draw-state.
   :update update-state
   :draw draw-state
   :mouse-pressed (fn [state event]
@@ -620,9 +629,5 @@
                        (println "starting")
                        (q/start-loop)))
                    state)
-  :features [:keep-on-top]
-  ; This sketch uses functional-mode middleware.
-  ; Check quil wiki for more info about middlewares and particularly
-  ; fun-mode.
   :middleware [m/fun-mode])
 
